@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import threading
 from functools import partial
 from typing import Callable, Dict, Optional
@@ -88,6 +89,7 @@ class ToolFailureError(Exception):
         super().__init__(payload.get("error", {}).get("message", "tool failed"))
         self.payload = payload
 from nfs import SynologyNFS
+from readonly import READ_ONLY_TOOLS
 from usermanagement import SynologyUserManager
 
 # Suppress InsecureRequestWarning when verify_ssl is disabled (internal NAS devices).
@@ -190,10 +192,23 @@ class SynologyMCPServer:
         handler: Callable,
     ):
         """Register a tool definition and its handler in the registry."""
+        # Fork: only read-only tools exist, and only configured NAS units are reachable:
+        # `base_url` would let the model send the stored credentials to any host.
+        if name not in READ_ONLY_TOOLS:
+            return
+        input_schema = {
+            **input_schema,
+            "properties": {
+                key: value
+                for key, value in input_schema.get("properties", {}).items()
+                if key != "base_url"
+            },
+        }
         tool = types.Tool(
             name=name,
             description=description,
             inputSchema=input_schema,
+            annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
         )
         self._tool_registry[name] = (tool, handler)
 
@@ -836,10 +851,9 @@ class SynologyMCPServer:
                 f"NAS '{nas_name}' not found. Available: {list(self.nas_name_map.keys())}"
             )
 
-        # Try explicit base_url
-        base_url = arguments.get("base_url")
-        if base_url:
-            return base_url.rstrip("/")
+        # Fork: no explicit base_url; only configured NAS units (see _register_tool).
+        if arguments.get("base_url"):
+            raise Exception("base_url is not accepted; pass nas_name (see synology_list_nas).")
 
         # Fall back to first connected session
         if self.sessions:
@@ -2062,11 +2076,24 @@ class SynologyMCPServer:
                     allowed_origins=allowed_origins,
                 )
 
+            # Fork: stateless JSON responses (MCP_STATELESS=true), an unauthenticated
+            # /healthz for the container healthcheck, and the Access JWT on everything else.
+            from starlette.responses import JSONResponse
+            from starlette.routing import Route
+
+            async def healthz(request):
+                return JSONResponse({"status": "ok"})
+
+            stateless = os.getenv("MCP_STATELESS", "false").lower() == "true"
             app = self.server.streamable_http_app(
                 streamable_http_path=config.http_path,
+                json_response=stateless,
+                stateless_http=stateless,
                 host=host,
                 transport_security=transport_security,
+                custom_starlette_routes=[Route("/healthz", healthz)],
             )
+            app = access_protected(app)
             logger.info(
                 f"Starting Streamable HTTP MCP server on http://{config.http_host}:{config.http_port}{config.http_path}"
             )
@@ -2183,6 +2210,28 @@ class SynologyMCPServer:
                 cleanup_results.append(f"{base_url}: Exception - {str(e)}")
 
         return cleanup_results
+
+
+def access_protected(app):
+    """Fork: wrap an HTTP app in the Cloudflare Access JWT check (access.py).
+
+    Needs CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD; refuses to serve without them unless
+    ALLOW_WITHOUT_ACCESS_JWT=true (local development).
+    """
+    from access import AccessJwtMiddleware, AccessJwtVerifier
+
+    team_domain = os.getenv("CF_ACCESS_TEAM_DOMAIN")
+    audience = os.getenv("CF_ACCESS_AUD")
+    if team_domain and audience:
+        return AccessJwtMiddleware(
+            app, AccessJwtVerifier(team_domain, audience), exempt_paths=frozenset({"/healthz"})
+        )
+    if os.getenv("ALLOW_WITHOUT_ACCESS_JWT", "false").lower() == "true":
+        logger.warning("Serving HTTP without the Cloudflare Access JWT check")
+        return app
+    raise Exception(
+        "Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD, or ALLOW_WITHOUT_ACCESS_JWT=true"
+    )
 
 
 async def main():

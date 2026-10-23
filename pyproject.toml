@@ -47,6 +47,8 @@ dependencies = [
     "pycryptodome",
     "requests",
     "mcp>=2.2.0",
+    # Fork: Cloudflare Access JWT check (access.py).
+    "pyjwt[crypto]>=2.10",
     "python-dotenv",
     "websockets>=17.0.1",
 ]
@@ -72,4 +74,4 @@ where = ["src"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["mcp_server", "config", "multiclient_bridge"]
+py-modules = ["mcp_server", "config", "multiclient_bridge", "readonly", "access"]

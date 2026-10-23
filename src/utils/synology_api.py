@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional, Tuple
 
 import requests
 
+from readonly import READ_ONLY_API_METHODS, refusal
+
 logger = logging.getLogger(__name__)
 
 
@@ -231,6 +233,9 @@ class SynologyAPIClient:
         # needed, and open a second session anyway. This client is now shared
         # between SynologyHealth and its SynologyISCSI delegate, which makes
         # concurrent use ordinary rather than theoretical.
+        # Fork: only the read-only calls in readonly.py ever reach DSM.
+        if (api, method) not in READ_ONLY_API_METHODS:
+            return refusal(api, method)
         attempted_sid = self.session_id
         effective_timeout = self.request_timeout if timeout is None else timeout
         result = self._do_request(
@@ -342,6 +347,9 @@ class SynologyAPIClient:
         ``Exit Code: N``. A regular 15-second JSON request can therefore time
         out or fail JSON decoding even when DSM completes the operation.
         """
+        # Fork: only the read-only calls in readonly.py ever reach DSM (no stream is one).
+        if (api, method) not in READ_ONLY_API_METHODS:
+            return refusal(api, method)
         attempted_sid = self.session_id
         result = self._do_stream_request(api, method, version, extra_params)
         # Same single-retry session recovery as request(): 106/107/119 mean the

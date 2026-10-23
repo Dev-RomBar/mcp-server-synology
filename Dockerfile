@@ -43,6 +43,13 @@ USER mcpuser
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Default command - supports both stdio (Claude/Cursor) and WebSocket (Xiaozhi) modes
-# Mode is controlled by ENABLE_XIAOZHI environment variable
+# Fork: serve stateless Streamable HTTP on port 8000 (/mcp, /healthz). NAS units come from
+# the environment (SYNOLOGY_NAS_NAMES), and are logged in to on first use.
+ENV MCP_HTTP=true \
+    MCP_HTTP_HOST=0.0.0.0 \
+    MCP_HTTP_PORT=8000 \
+    MCP_STATELESS=true \
+    AUTO_LOGIN=false
+EXPOSE 8000
+
 CMD ["python", "main.py"] 

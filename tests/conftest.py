@@ -211,6 +211,65 @@ def pytest_addoption(parser):
     )
 
 
+# Fork: upstream tests of what this fork removes (write calls, tools that are not
+# read-only). tests/test_fork_readonly.py checks that they are refused instead.
+FORK_REMOVED_TESTS = frozenset(
+    {
+        "tests/test_container_manager.py::test_container_delete_wire_format_matches_dsm",
+        "tests/test_container_manager.py::test_container_logs_forwards_custom_offset_and_limit",
+        "tests/test_container_manager.py::test_container_logs_wire_format_matches_dsm",
+        "tests/test_container_manager.py::test_container_name_methods_quote_name_for_dsm",
+        "tests/test_container_manager.py::test_container_tools_are_registered",
+        "tests/test_container_manager.py::test_image_methods_wire_format_matches_dsm",
+        "tests/test_container_manager.py::test_network_methods_wire_format_matches_dsm",
+        "tests/test_container_manager.py::test_project_create_wire_format_matches_dsm",
+        "tests/test_container_manager.py::test_project_get_omits_compose_environment_and_secret_fields",
+        "tests/test_container_manager.py::test_project_id_lookup_tolerates_non_dict_data",
+        "tests/test_container_manager.py::test_project_name_methods_find_project_id_before_calling_dsm",
+        "tests/test_container_manager.py::test_project_stream_failure_returns_structured_exit_code",
+        "tests/test_container_manager.py::test_project_stream_uses_final_exit_code_marker",
+        "tests/test_container_manager.py::test_project_tool_schemas_require_handler_inputs",
+        "tests/test_container_manager.py::test_project_update_finds_project_id_before_updating",
+        "tests/test_container_manager.py::test_project_update_quotes_service_portal_params_like_create",
+        "tests/test_container_manager.py::test_registry_methods_wire_format_matches_dsm",
+        "tests/test_file_station_binary_copy.py::test_copy_tool_schema_and_count",
+        "tests/test_iscsi.py::TestEveryIscsiHandlerResolvesOffLoop::test_the_registry_actually_yields_the_iscsi_tools",
+        "tests/test_iscsi.py::TestUndeclaredArguments::test_declared_arguments_pass",
+        "tests/test_iscsi.py::TestUndeclaredArguments::test_lun_type_instead_of_type_is_refused_not_defaulted",
+        "tests/test_iscsi.py::TestUndeclaredArguments::test_misnamed_credentials_create_nothing",
+        "tests/test_iscsi.py::TestUndeclaredArguments::test_protocol_meta_keys_are_not_refused",
+        "tests/test_iscsi.py::TestUndeclaredArguments::test_the_message_lists_what_is_accepted",
+        "tests/test_iscsi.py::TestWriteTimeouts::test_the_client_actually_passes_it_through",
+        "tests/test_logout.py::test_expired_session_logout_clears_all_service_instance_caches",
+        "tests/test_logout.py::test_logout_accepts_a_trailing_slash_in_the_caller_url",
+        "tests/test_logout.py::test_logout_clears_all_service_instance_caches",
+        "tests/test_nfs.py::test_create_share_wire_format_matches_dsm_7_3_2",
+        "tests/test_nfs.py::test_nfs_set_permission_wire_format_matches_dsm_7_3_2",
+        "tests/test_reverse_proxy.py::test_create_entry_describes_dsm_duplicate_code",
+        "tests/test_reverse_proxy.py::test_create_entry_wire_format",
+        "tests/test_reverse_proxy.py::test_create_reports_success_when_only_readback_fails",
+        "tests/test_reverse_proxy.py::test_delete_entry_wire_format",
+        "tests/test_reverse_proxy.py::test_reverse_proxy_tools_registered",
+        "tests/test_reverse_proxy.py::test_update_entry_custom_headers_keep_websocket_pair",
+        "tests/test_reverse_proxy.py::test_update_entry_empty_profile_clears_acl",
+        "tests/test_reverse_proxy.py::test_update_entry_layers_changes_over_stored_entry",
+        "tests/test_reverse_proxy.py::test_update_refuses_description_used_by_another_entry",
+        "tests/test_reverse_proxy.py::test_update_reports_success_when_only_readback_fails",
+        "tests/test_reverse_proxy.py::test_write_timeout_is_long_and_reported_as_outcome_unknown",
+        "tests/test_user_management.py::test_add_user_to_group_polls_until_visible",
+        "tests/test_user_management.py::test_add_user_to_group_treats_unreadable_listing_as_unverified",
+        "tests/test_user_management.py::test_add_user_to_group_warns_when_task_never_applies",
+        "tests/test_user_management.py::test_add_user_to_group_wire_format_and_verification",
+        "tests/test_user_management.py::test_group_member_names_tolerates_response_shapes",
+        "tests/test_user_management.py::test_group_write_api_error_skips_verification",
+        "tests/test_user_management.py::test_remove_user_from_group_unknown_payload_does_not_verify",
+        "tests/test_user_management.py::test_remove_user_from_group_verifies_departure",
+        "tests/test_user_management.py::test_remove_user_from_group_warns_when_still_member",
+        "tests/test_user_management.py::test_verification_skips_already_confirmed_groups",
+    }
+)
+
+
 # Custom test collection - only run if credentials are available
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on environment.
@@ -224,6 +283,8 @@ def pytest_collection_modifyitems(config, items):
 
     run_destructive = config.getoption("--run-destructive")
     for item in items:
+        if item.nodeid.split("[")[0] in FORK_REMOVED_TESTS:
+            item.add_marker(pytest.mark.skip(reason="Fork: tests a removed write path or tool"))
         if "real_nas" in item.keywords and not synology_config.has_synology_credentials():
             item.add_marker(pytest.mark.skip(reason="No Synology credentials configured"))
         if "destructive" in item.keywords and not run_destructive:

@@ -523,6 +523,39 @@ class SynologyConfig:
             # No settings file
             logger.info(f"No {SETTINGS_FILE} found")
 
+        self._load_env_nas_configs()
+
+    def _load_env_nas_configs(self):
+        """Fork: NAS units from the environment, for containers with no settings file.
+
+        SYNOLOGY_NAS_NAMES lists the names (comma-separated). Each name NAME reads
+        SYNOLOGY_<NAME>_URL, SYNOLOGY_<NAME>_USERNAME, SYNOLOGY_<NAME>_PASSWORD and,
+        optionally, SYNOLOGY_<NAME>_VERIFY_SSL (default: VERIFY_SSL).
+        """
+        for nas_name in os.getenv("SYNOLOGY_NAS_NAMES", "").split(","):
+            nas_name = nas_name.strip()
+            if not nas_name:
+                continue
+            prefix = f"SYNOLOGY_{nas_name.upper()}_"
+            base_url = os.getenv(f"{prefix}URL", "").rstrip("/")
+            username = os.getenv(f"{prefix}USERNAME", "")
+            password = os.getenv(f"{prefix}PASSWORD", "")
+            if not (base_url and username and password):
+                logger.warning(
+                    f"Skipping NAS '{nas_name}': set {prefix}URL, {prefix}USERNAME and {prefix}PASSWORD"
+                )
+                continue
+            verify_ssl = os.getenv(f"{prefix}VERIFY_SSL")
+            self.nas_configs[nas_name] = {
+                "base_url": base_url,
+                "username": username,
+                "password": password,
+                "verify_ssl": self.verify_ssl if verify_ssl is None else verify_ssl.lower() == "true",
+                "note": "",
+                "otp_code": None,
+                "device_id": None,
+            }
+
     # ------------------------------------------------------------------
     # Public helpers
     # ------------------------------------------------------------------

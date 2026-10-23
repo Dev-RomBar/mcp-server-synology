@@ -1,5 +1,37 @@
 # 💾 Synology MCP Server
 
+> **Read-only fork** of [atom2ueki/mcp-server-synology](https://github.com/atom2ueki/mcp-server-synology).
+> It can never change a NAS:
+>
+> - Only the health and storage tools in `src/readonly.py` (`READ_ONLY_TOOLS`) are listed, each
+>   annotated `readOnlyHint`. File Station, Download Station, users, groups, login/logout and
+>   every create, set, start, stop or delete tool are gone. A tool added upstream stays hidden
+>   until it is listed there.
+> - The API client (`src/utils/synology_api.py`, `request` and `post_stream`) only sends the
+>   DSM `(api, method)` pairs in `READ_ONLY_API_METHODS`; anything else is refused before any
+>   HTTP request. `tests/test_fork_readonly.py` runs every listed tool against a fake DSM and
+>   checks it stays inside that list.
+> - `base_url` is gone: tools only reach the NAS units configured on the server, so the model
+>   can't send the stored credentials elsewhere.
+> - NAS units come from the environment: `SYNOLOGY_NAS_NAMES=nas1,nas2`, then
+>   `SYNOLOGY_<NAME>_URL`, `_USERNAME`, `_PASSWORD` and optionally `_VERIFY_SSL` for each.
+> - Over HTTP, every request but `/healthz` needs a valid Cloudflare Access JWT
+>   (`Cf-Access-Jwt-Assertion`, with `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`). The server
+>   refuses to start without those unless `ALLOW_WITHOUT_ACCESS_JWT=true`.
+>   `MCP_STATELESS=true` serves `/mcp` statelessly (JSON responses, no sessions).
+> - The `Dockerfile` serves Streamable HTTP on port 8000 and logs in on first use
+>   (`AUTO_LOGIN=false`), so an unreachable NAS doesn't stop the server.
+> - The PyPI publish and label-sync workflows are removed.
+>
+> DSM has no read-only administrator role, and the system and storage APIs need one, so the
+> account is usually an administrator: this fork is what keeps it read-only.
+>
+> Sync with upstream: `git fetch upstream && git merge upstream/main`, then check that the
+> `Fork:` changes still hold (`src/readonly.py`, `SynologyAPIClient.request`/`post_stream`,
+> `SynologyMCPServer._register_tool`/`_get_base_url`, `access_protected`) and that
+> `uv run pytest -m "not real_nas and not destructive"` passes. Upstream tests of removed
+> paths are skipped in `tests/conftest.py` (`FORK_REMOVED_TESTS`).
+
 ![Synology MCP Server](assets/banner.png)
 
 A Model Context Protocol (MCP) server for Synology NAS devices. Enables AI assistants to manage files and downloads through secure authentication and session management.
