@@ -1,5 +1,7 @@
 # 💾 Synology MCP Server
 
+Status: Production
+
 > **Read-only fork** of [atom2ueki/mcp-server-synology](https://github.com/atom2ueki/mcp-server-synology).
 > It can never change a NAS:
 >
