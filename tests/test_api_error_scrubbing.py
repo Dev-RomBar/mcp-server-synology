@@ -48,8 +48,7 @@ def test_scrub_secrets_keeps_the_diagnosis():
     )
 
     assert "_sid=***" in scrubbed
-    assert "nas.example.com" in scrubbed
-    assert "port=5000" in scrubbed
+    assert "host='nas.example.com', port=5000" in scrubbed
     assert "Max retries exceeded" in scrubbed
 
 
